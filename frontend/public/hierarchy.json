@@ -1,0 +1,377 @@
+{
+  "hierarchy": {
+    "name": "top",
+    "instance_name": "top",
+    "file": "tests/fixtures/src/top.sv",
+    "ports": [
+      {
+        "direction": "input",
+        "name": "clk"
+      },
+      {
+        "direction": "input",
+        "name": "rst_n"
+      },
+      {
+        "direction": "output",
+        "name": "gpio_out",
+        "width": "[7:0]"
+      },
+      {
+        "direction": "input",
+        "name": "rx"
+      },
+      {
+        "direction": "output",
+        "name": "tx"
+      }
+    ],
+    "connections": [],
+    "children": [
+      {
+        "name": "cpu",
+        "instance_name": "u_cpu",
+        "file": "tests/fixtures/src/core/cpu.sv",
+        "ports": [
+          {
+            "direction": "input",
+            "name": "clk"
+          },
+          {
+            "direction": "input",
+            "name": "rst_n"
+          },
+          {
+            "direction": "inout",
+            "name": "data",
+            "width": "[31:0]"
+          },
+          {
+            "direction": "output",
+            "name": "addr",
+            "width": "[15:0]"
+          }
+        ],
+        "connections": [
+          {
+            "port": "clk",
+            "signal": "clk"
+          },
+          {
+            "port": "rst_n",
+            "signal": "rst_n"
+          },
+          {
+            "port": "data",
+            "signal": "data_bus"
+          },
+          {
+            "port": "addr",
+            "signal": "addr_bus"
+          }
+        ],
+        "children": [
+          {
+            "name": "alu",
+            "instance_name": "u_alu",
+            "file": "tests/fixtures/src/core/alu.sv",
+            "ports": [
+              {
+                "direction": "input",
+                "name": "clk"
+              },
+              {
+                "direction": "input",
+                "name": "a",
+                "width": "[31:0]"
+              },
+              {
+                "direction": "input",
+                "name": "b",
+                "width": "[31:0]"
+              },
+              {
+                "direction": "output",
+                "name": "result",
+                "width": "[31:0]"
+              }
+            ],
+            "connections": [
+              {
+                "port": "clk",
+                "signal": "clk"
+              },
+              {
+                "port": "a",
+                "signal": "reg_data"
+              },
+              {
+                "port": "b",
+                "signal": "data"
+              },
+              {
+                "port": "result",
+                "signal": "alu_result"
+              }
+            ],
+            "children": []
+          },
+          {
+            "name": "regfile",
+            "instance_name": "u_regfile",
+            "file": "tests/fixtures/src/core/regfile.sv",
+            "ports": [
+              {
+                "direction": "input",
+                "name": "clk"
+              },
+              {
+                "direction": "input",
+                "name": "rst_n"
+              },
+              {
+                "direction": "input",
+                "name": "addr",
+                "width": "[4:0]"
+              },
+              {
+                "direction": "output",
+                "name": "data",
+                "width": "[31:0]"
+              }
+            ],
+            "connections": [
+              {
+                "port": "clk",
+                "signal": "clk"
+              },
+              {
+                "port": "rst_n",
+                "signal": "rst_n"
+              },
+              {
+                "port": "addr",
+                "signal": "reg_addr"
+              },
+              {
+                "port": "data",
+                "signal": "reg_data"
+              }
+            ],
+            "children": []
+          }
+        ]
+      },
+      {
+        "name": "mem_ctrl",
+        "instance_name": "u_mem",
+        "file": "tests/fixtures/src/memory/mem_ctrl.sv",
+        "ports": [
+          {
+            "direction": "input",
+            "name": "clk"
+          },
+          {
+            "direction": "input",
+            "name": "addr",
+            "width": "[15:0]"
+          },
+          {
+            "direction": "inout",
+            "name": "data",
+            "width": "[31:0]"
+          }
+        ],
+        "connections": [
+          {
+            "port": "clk",
+            "signal": "clk"
+          },
+          {
+            "port": "addr",
+            "signal": "addr_bus"
+          },
+          {
+            "port": "data",
+            "signal": "data_bus"
+          }
+        ],
+        "children": [
+          {
+            "name": "cache",
+            "instance_name": "u_cache",
+            "file": "tests/fixtures/src/memory/cache.sv",
+            "ports": [
+              {
+                "direction": "input",
+                "name": "clk"
+              },
+              {
+                "direction": "input",
+                "name": "addr",
+                "width": "[11:0]"
+              },
+              {
+                "direction": "inout",
+                "name": "data",
+                "width": "[31:0]"
+              }
+            ],
+            "connections": [
+              {
+                "port": "clk",
+                "signal": "clk"
+              },
+              {
+                "port": "addr",
+                "signal": "addr[11:0]"
+              },
+              {
+                "port": "data",
+                "signal": "data"
+              }
+            ],
+            "children": []
+          }
+        ]
+      },
+      {
+        "name": "uart",
+        "instance_name": "u_uart",
+        "file": "tests/fixtures/src/io/uart.sv",
+        "ports": [
+          {
+            "direction": "input",
+            "name": "clk"
+          },
+          {
+            "direction": "input",
+            "name": "rx"
+          },
+          {
+            "direction": "output",
+            "name": "tx"
+          }
+        ],
+        "connections": [
+          {
+            "port": "clk",
+            "signal": "clk"
+          },
+          {
+            "port": "rx",
+            "signal": "rx"
+          },
+          {
+            "port": "tx",
+            "signal": "tx"
+          }
+        ],
+        "children": []
+      },
+      {
+        "name": "gpio",
+        "instance_name": "u_gpio",
+        "file": "tests/fixtures/src/io/gpio.sv",
+        "ports": [
+          {
+            "direction": "input",
+            "name": "clk"
+          },
+          {
+            "direction": "output",
+            "name": "gpio_out",
+            "width": "[7:0]"
+          }
+        ],
+        "connections": [
+          {
+            "port": "clk",
+            "signal": "clk"
+          },
+          {
+            "port": "gpio_out",
+            "signal": "gpio_out"
+          }
+        ],
+        "children": []
+      }
+    ]
+  },
+  "file_tree": {
+    "name": "src",
+    "path": "/Users/ankitroshantalluri/sv-visualizer/backend/tests/fixtures/src",
+    "type": "dir",
+    "children": [
+      {
+        "name": "core",
+        "path": "/Users/ankitroshantalluri/sv-visualizer/backend/tests/fixtures/src/core",
+        "type": "dir",
+        "children": [
+          {
+            "name": "alu.sv",
+            "path": "/Users/ankitroshantalluri/sv-visualizer/backend/tests/fixtures/src/core/alu.sv",
+            "type": "file",
+            "children": []
+          },
+          {
+            "name": "cpu.sv",
+            "path": "/Users/ankitroshantalluri/sv-visualizer/backend/tests/fixtures/src/core/cpu.sv",
+            "type": "file",
+            "children": []
+          },
+          {
+            "name": "regfile.sv",
+            "path": "/Users/ankitroshantalluri/sv-visualizer/backend/tests/fixtures/src/core/regfile.sv",
+            "type": "file",
+            "children": []
+          }
+        ]
+      },
+      {
+        "name": "io",
+        "path": "/Users/ankitroshantalluri/sv-visualizer/backend/tests/fixtures/src/io",
+        "type": "dir",
+        "children": [
+          {
+            "name": "gpio.sv",
+            "path": "/Users/ankitroshantalluri/sv-visualizer/backend/tests/fixtures/src/io/gpio.sv",
+            "type": "file",
+            "children": []
+          },
+          {
+            "name": "uart.sv",
+            "path": "/Users/ankitroshantalluri/sv-visualizer/backend/tests/fixtures/src/io/uart.sv",
+            "type": "file",
+            "children": []
+          }
+        ]
+      },
+      {
+        "name": "memory",
+        "path": "/Users/ankitroshantalluri/sv-visualizer/backend/tests/fixtures/src/memory",
+        "type": "dir",
+        "children": [
+          {
+            "name": "cache.sv",
+            "path": "/Users/ankitroshantalluri/sv-visualizer/backend/tests/fixtures/src/memory/cache.sv",
+            "type": "file",
+            "children": []
+          },
+          {
+            "name": "mem_ctrl.sv",
+            "path": "/Users/ankitroshantalluri/sv-visualizer/backend/tests/fixtures/src/memory/mem_ctrl.sv",
+            "type": "file",
+            "children": []
+          }
+        ]
+      },
+      {
+        "name": "top.sv",
+        "path": "/Users/ankitroshantalluri/sv-visualizer/backend/tests/fixtures/src/top.sv",
+        "type": "file",
+        "children": []
+      }
+    ]
+  }
+}
