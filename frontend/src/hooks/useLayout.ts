@@ -344,6 +344,7 @@ function routePoints(src: Endpoint, dst: Endpoint): { x: number; y: number }[] {
 
   // ── Internal (left / right) ────────────────────────────────────────────────
 
+  // right→left same-row: handled in computeWires with per-row lane index
   if (src.side === 'right' && dst.side === 'left') {
     if (src.gy === dst.gy) return pts([[src.gx, src.gy], [dst.gx, dst.gy]]);
     const midGX = src.gx + n;
@@ -498,16 +499,49 @@ export function computeWires(
     return 4;
   }
 
+  // Bottom of each block row in grid units (for below-row U-shape routing)
+  const rowBottoms = new Map<number, number>();
+  blocks.forEach(b => {
+    rowBottoms.set(b.row, Math.max(rowBottoms.get(b.row) ?? 0, b.gy + b.gh));
+  });
+
+  // Lane counter per row — each right→left same-row wire gets its own lane below the row
+  const rowLaneCount = new Map<number, number>();
+
   const wires: Wire[] = [];
   for (const [, endpoints] of endpointMap.entries()) {
     if (endpoints.length < 2) continue;
     endpoints.sort((a, b) => epPriority(a) - epPriority(b));
     const hub = endpoints[0];
     for (let i = 1; i < endpoints.length; i++) {
+      const spoke = endpoints[i];
+      let points: { x: number; y: number }[];
+
+      // Internal right→left same-row: U-shape routed below the block row,
+      // with each signal on its own staggered horizontal lane.
+      if (
+        hub.side === 'right' && spoke.side === 'left' &&
+        hub.blockRow >= 0 && hub.blockRow === spoke.blockRow
+      ) {
+        const row       = hub.blockRow;
+        const rowBottom = rowBottoms.get(row) ?? (hub.blockGY + hub.blockGH);
+        const laneIdx   = rowLaneCount.get(row) ?? 0;
+        rowLaneCount.set(row, laneIdx + 1);
+        const laneGY    = rowBottom + laneIdx + 1;
+        points = pts([
+          [hub.gx,   hub.gy],    // right pin
+          [hub.gx,   laneGY],    // drop below the row
+          [spoke.gx, laneGY],    // run horizontally to dst column
+          [spoke.gx, spoke.gy],  // rise to left pin
+        ]);
+      } else {
+        points = routePoints(hub, spoke);
+      }
+
       wires.push({
         signal: hub.rawSignal,
-        points: routePoints(hub, endpoints[i]),
-        isBoundary: hub.isBoundary || endpoints[i].isBoundary,
+        points,
+        isBoundary: hub.isBoundary || spoke.isBoundary,
       });
     }
   }
