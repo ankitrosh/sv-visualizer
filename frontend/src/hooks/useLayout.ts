@@ -344,7 +344,6 @@ function routePoints(src: Endpoint, dst: Endpoint): { x: number; y: number }[] {
 
   // ── Internal (left / right) ────────────────────────────────────────────────
 
-  // right→left same-row: handled in computeWires with per-row lane index
   if (src.side === 'right' && dst.side === 'left') {
     if (src.gy === dst.gy) return pts([[src.gx, src.gy], [dst.gx, dst.gy]]);
     const midGX = src.gx + n;
@@ -428,6 +427,41 @@ function routePoints(src: Endpoint, dst: Endpoint): { x: number; y: number }[] {
     return pts([[src.gx, src.gy], [src.gx, clearGY], [dst.gx, clearGY], [dst.gx, dst.gy]]);
   }
 
+  // ── Cross-side: bottom pin → internal input/output ────────────────────────
+  // A signal that is both a boundary output (bottom pin) and connects to a
+  // sibling's left or right pin. Route: down to a lane, across, then up.
+
+  // bottom → left/right: Z-shape staircase.
+  // Drop n squares from the bottom pin, run horizontal, then approach the
+  // destination n squares before its edge, drop to pin y, enter the pin.
+  // n = slotIndex+1 staggers each signal 1 grid unit apart on both axes.
+  if (src.side === 'bottom' && (dst.side === 'left' || dst.side === 'right')) {
+    const laneGY     = src.gy + n;
+    const approachGX = dst.side === 'left'
+      ? Math.max(dst.gx - n, src.gx + 1)   // n squares left of dst pin
+      : Math.min(dst.gx + n, src.gx - 1);  // n squares right of dst pin
+    return pts([
+      [src.gx,     src.gy],
+      [src.gx,     laneGY],
+      [approachGX, laneGY],
+      [approachGX, dst.gy],
+      [dst.gx,     dst.gy],
+    ]);
+  }
+
+  // top → left: mirror of above, going upward from the top pin.
+  if (src.side === 'top' && dst.side === 'left') {
+    const laneGY     = src.gy - n;
+    const approachGX = Math.max(dst.gx - n, src.gx + 1);
+    return pts([
+      [src.gx,     src.gy],
+      [src.gx,     laneGY],
+      [approachGX, laneGY],
+      [approachGX, dst.gy],
+      [dst.gx,     dst.gy],
+    ]);
+  }
+
   // Fallback: straight line
   return [{ x: gp(src.gx), y: gp(src.gy) }, { x: gp(dst.gx), y: gp(dst.gy) }];
 }
@@ -476,16 +510,25 @@ export function computeWires(
       if (!pin) continue;
       const side = sideOf(conn.port);
       // Top and bottom pins group with their row's boundary entry/exit pins
-      const key = (side === 'top' || side === 'bottom')
-        ? `${baseSignal(conn.signal)}_r${block.row}`
-        : baseSignal(conn.signal);
-      addEP(key, {
+      const ep: Endpoint = {
         gx: pin.gx, gy: pin.gy,
         side,
         slotIndex: pin.slotIndex,
         blockGY: block.gy, blockGH: block.gh, blockRow: block.row,
         isBoundary: false, rawSignal: conn.signal,
-      });
+      };
+
+      if (side === 'top') {
+        // Boundary inputs: row key only (connects to per-row canvas entry pin)
+        addEP(`${baseSignal(conn.signal)}_r${block.row}`, ep);
+      } else if (side === 'bottom') {
+        // Boundary outputs: row key (canvas exit wire) + plain key (sibling connection)
+        addEP(`${baseSignal(conn.signal)}_r${block.row}`, ep);
+        addEP(baseSignal(conn.signal), ep);
+      } else {
+        // Internal left/right pins: plain key
+        addEP(baseSignal(conn.signal), ep);
+      }
     }
   });
 
@@ -499,14 +542,47 @@ export function computeWires(
     return 4;
   }
 
-  // Bottom of each block row in grid units (for below-row U-shape routing)
-  const rowBottoms = new Map<number, number>();
-  blocks.forEach(b => {
-    rowBottoms.set(b.row, Math.max(rowBottoms.get(b.row) ?? 0, b.gy + b.gh));
-  });
+  // Shared lane counter for cross-row connections keyed by "srcRow→dstRow".
+  // Each cross-row wire (right→left or left→left descending) gets the next
+  // available lane, so they stack 1 grid unit apart in the row gap.
+  const crossRowLanes = new Map<string, number>();
+  function nextLane(srcRow: number, dstRow: number): number {
+    const key = `${srcRow}→${dstRow}`;
+    const idx = crossRowLanes.get(key) ?? 0;
+    crossRowLanes.set(key, idx + 1);
+    return idx + 1; // lane 1 = 1 unit into gap, lane 2 = 2 units, …
+  }
 
-  // Lane counter per row — each right→left same-row wire gets its own lane below the row
-  const rowLaneCount = new Map<number, number>();
+  function isCrossRow(hub: Endpoint, spoke: Endpoint): boolean {
+    return hub.blockRow >= 0 && spoke.blockRow >= 0 && hub.blockRow < spoke.blockRow;
+  }
+
+  function crossRowPoints(hub: Endpoint, spoke: Endpoint, n: number): { x: number; y: number }[] {
+    const gapGY     = hub.blockGY + hub.blockGH + n;   // n units into the row gap
+    const approachGX = spoke.gx - n;                    // n units left of dest pin
+
+    if (hub.side === 'right') {
+      // exit right n units, drop, run horizontal, approach, enter
+      return pts([
+        [hub.gx,     hub.gy],
+        [hub.gx + n, hub.gy],
+        [hub.gx + n, gapGY],
+        [approachGX, gapGY],
+        [approachGX, spoke.gy],
+        [spoke.gx,   spoke.gy],
+      ]);
+    } else {
+      // left pin: exit left n units, drop, run horizontal right, approach, enter
+      return pts([
+        [hub.gx,     hub.gy],
+        [hub.gx - n, hub.gy],
+        [hub.gx - n, gapGY],
+        [approachGX, gapGY],
+        [approachGX, spoke.gy],
+        [spoke.gx,   spoke.gy],
+      ]);
+    }
+  }
 
   const wires: Wire[] = [];
   for (const [, endpoints] of endpointMap.entries()) {
@@ -517,23 +593,12 @@ export function computeWires(
       const spoke = endpoints[i];
       let points: { x: number; y: number }[];
 
-      // Internal right→left same-row: U-shape routed below the block row,
-      // with each signal on its own staggered horizontal lane.
-      if (
-        hub.side === 'right' && spoke.side === 'left' &&
-        hub.blockRow >= 0 && hub.blockRow === spoke.blockRow
-      ) {
-        const row       = hub.blockRow;
-        const rowBottom = rowBottoms.get(row) ?? (hub.blockGY + hub.blockGH);
-        const laneIdx   = rowLaneCount.get(row) ?? 0;
-        rowLaneCount.set(row, laneIdx + 1);
-        const laneGY    = rowBottom + laneIdx + 1;
-        points = pts([
-          [hub.gx,   hub.gy],    // right pin
-          [hub.gx,   laneGY],    // drop below the row
-          [spoke.gx, laneGY],    // run horizontally to dst column
-          [spoke.gx, spoke.gy],  // rise to left pin
-        ]);
+      const crossRowRL = hub.side === 'right' && spoke.side === 'left' && isCrossRow(hub, spoke);
+      const crossRowLL = hub.side === 'left'  && spoke.side === 'left' && isCrossRow(hub, spoke) && spoke.gx > hub.gx;
+
+      if (crossRowRL || crossRowLL) {
+        const n = nextLane(hub.blockRow, spoke.blockRow);
+        points = crossRowPoints(hub, spoke, n);
       } else {
         points = routePoints(hub, spoke);
       }
