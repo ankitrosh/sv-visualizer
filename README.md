@@ -24,10 +24,14 @@ cd frontend && npm install && cd ..
 
 ## Usage
 
-Run the script with your top module and source directory:
-
+**macOS / Linux:**
 ```bash
 ./run.sh --top <top_module> --src <path/to/rtl>
+```
+
+**Windows (PowerShell):**
+```powershell
+.\run.ps1 -top <top_module> -src <path\to\rtl>
 ```
 
 Example:
@@ -38,13 +42,15 @@ Example:
 
 This parses your SystemVerilog files, writes a `hierarchy.json` to `frontend/public/`, and starts the dev server. Open the URL shown in the terminal (usually `http://localhost:5173`).
 
+> **Windows note:** if PowerShell blocks the script with an execution policy error, run `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned` once in an elevated PowerShell prompt.
+
 ### Options
 
-| Flag | Description | Default |
-|------|-------------|---------|
-| `--top` | Top-level module name (required) | |
-| `--src` | Directory containing `.sv` / `.v` files | `backend/tests/fixtures/src` |
-| `--exts` | Space-separated list of file extensions to scan | `.sv .v .svh` |
+| Flag (Mac/Linux) | Flag (Windows) | Description | Default |
+|------------------|----------------|-------------|---------|
+| `--top` | `-top` | Top-level module name (required) | |
+| `--src` | `-src` | Directory containing `.sv` / `.v` files | `backend/tests/fixtures/src` |
+| `--exts` | `-exts` | Space-separated list of file extensions to scan | `.sv .v .svh` |
 
 ## Without a source directory
 
