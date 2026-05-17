@@ -10,6 +10,7 @@ export const H_GAP_G       = 8;    // horizontal gap between columns (wire lanes
 export const V_GAP_G       = 8;    // vertical gap between rows (wire lanes)
 export const PAD_G         = 5;    // canvas padding on all sides
 export const PIN_R         = 5;    // pin-circle radius in px (not a grid value)
+const CHAR_W_PX    = 6.5;  // approx px per char at fontSize 10 monospace
 
 export const gp = (n: number) => n * G; // grid units → px
 
@@ -62,6 +63,41 @@ export interface LayoutResult {
 
 function baseSignal(s: string) {
   return s.replace(/\s*\[.*$/, '').trim();
+}
+
+// Split a bus concatenation {a, b[3:0], c} into simple signal names ['a','b','c'].
+// Returns [] for non-concatenation signals.
+function extractBusComponents(signal: string): string[] {
+  const s = signal.trim();
+  if (!s.startsWith('{') || !s.endsWith('}')) return [];
+  const inner = s.slice(1, -1);
+  const parts: string[] = [];
+  let depth = 0;
+  let cur = '';
+  for (const ch of inner) {
+    if ('{(['.includes(ch)) { depth++; cur += ch; }
+    else if ('})]'.includes(ch)) { depth--; cur += ch; }
+    else if (ch === ',' && depth === 0) {
+      const t = baseSignal(cur.trim());
+      if (t && /^\w+$/.test(t)) parts.push(t);
+      cur = '';
+    } else {
+      cur += ch;
+    }
+  }
+  const last = baseSignal(cur.trim());
+  if (last && /^\w+$/.test(last)) parts.push(last);
+  return parts;
+}
+
+// Minimum block width (grid units) so left + right pin labels don't overlap.
+function minWidthFromLabels(left: Port[], right: Port[]): number {
+  const maxLen = (ps: Port[]) =>
+    ps.length === 0 ? 0 :
+    Math.max(...ps.map(p => p.name.length + (p.width ? 1 + p.width.length : 0)));
+  const leftPx  = maxLen(left)  * CHAR_W_PX + PIN_R + 4;
+  const rightPx = maxLen(right) * CHAR_W_PX + PIN_R + 4;
+  return Math.ceil((leftPx + rightPx + G) / G); // +G for center gap
 }
 
 // ── Connectivity sort ─────────────────────────────────────────────────────────
@@ -169,14 +205,15 @@ export function computeLayout(children: HierarchyNode[], parentPorts: Port[]): L
   const numRows = Math.ceil(n / numCols);
 
   // All downstream logic uses the sorted arrays so producers appear before consumers
-  // Column width = max block width in that column (driven by top/bottom pin count)
+  // Column width = max block width in that column (top/bottom pin count + label fit)
   const colWidths: number[] = Array.from({ length: numCols }, (_, c) => {
     let w = MIN_BLOCK_W_G;
     for (let r = 0; r < numRows; r++) {
       const idx = r * numCols + c;
       if (idx < n) {
-        const { top, bottom } = sortedClassified[idx];
+        const { top, bottom, left, right } = sortedClassified[idx];
         w = Math.max(w, Math.max(top.length, bottom.length, 1) * PORT_W_G);
+        w = Math.max(w, minWidthFromLabels(left, right));
       }
     }
     return Math.max(w, MIN_BLOCK_W_G);
@@ -212,9 +249,10 @@ export function computeLayout(children: HierarchyNode[], parentPorts: Port[]): L
     const bx  = colStartGX[col];
     const by  = rowStartGY[row];
     const bw  = colWidths[col];
-    const bh  = rowHeights[row];
-
     const { top, bottom, left, right } = sortedClassified[i];
+    // Each block uses its own height; rowHeights (max) is only used for row
+    // spacing and wire routing so lanes clear the tallest block in the row.
+    const bh  = HEADER_G + Math.max(left.length, right.length, 1) * PIN_G;
 
     // Top pins: left-to-right from block left; bottom pins: right-to-left from block right
     const topPinX    = (idx: number) => bx + idx * PORT_W_G + Math.floor(PORT_W_G / 2);
@@ -525,9 +563,11 @@ export function computeWires(
         // Boundary outputs: row key (canvas exit wire) + plain key (sibling connection)
         addEP(`${baseSignal(conn.signal)}_r${block.row}`, ep);
         addEP(baseSignal(conn.signal), ep);
+        for (const comp of extractBusComponents(conn.signal)) addEP(comp, ep);
       } else {
-        // Internal left/right pins: plain key
+        // Internal left/right pins: plain key + each component of bus concatenations
         addEP(baseSignal(conn.signal), ep);
+        for (const comp of extractBusComponents(conn.signal)) addEP(comp, ep);
       }
     }
   });
